@@ -1,0 +1,14 @@
+# Web UI
+gradio>=4.12.0
+
+# HTTP 请求
+requests>=2.31.0
+
+# 日志和进度显示
+tqdm>=4.66.1
+
+# 时间处理
+python-dateutil>=2.8.2
+
+# 基础依赖
+pathlib>=1.0.1 
