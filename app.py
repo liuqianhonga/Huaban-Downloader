@@ -4,6 +4,8 @@ import time
 import os
 import logging
 from typing import Optional, Tuple, List, Any
+import json
+from pathlib import Path
 
 # 配置日志
 logging.basicConfig(
@@ -11,6 +13,18 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+def load_cookie():
+    cookie_path = Path("COOKIE")
+    if cookie_path.exists():
+        with open(cookie_path, "r", encoding="utf-8") as f:
+            return f.read().strip()
+    return ""
+
+def save_cookie(cookie):
+    cookie_path = Path("COOKIE")
+    with open(cookie_path, "w", encoding="utf-8") as f:
+        f.write(cookie)
 
 def download_board(
     board_id: str,
@@ -29,6 +43,9 @@ def download_board(
     Returns:
         tuple: (预览列表, 画板信息, 状态信息)
     """
+    if cookie:  # 如果用户输入了新的cookie，保存它
+        save_cookie(cookie)
+    
     try:
         downloader = HuabanDownloader()
         
@@ -91,6 +108,10 @@ def download_board(
 
 def create_ui() -> gr.Blocks:
     """创建Gradio界面"""
+    # 加载保存的cookie
+    saved_cookie = load_cookie()
+    logger.info(f"Loaded cookie: {saved_cookie[:30]}...")  # 只打印前30个字符
+    
     with gr.Blocks(
         title="花瓣网画板下载器",
         theme=gr.themes.Soft(
@@ -125,9 +146,10 @@ def create_ui() -> gr.Blocks:
             cookie = gr.Textbox(
                 label="Cookie",
                 placeholder="请输入Cookie",
-                info="从浏览器开发者工具中复制",
+                info="从浏览器开发者工具中复制（已自动保存）",
                 lines=3,
-                scale=2
+                scale=2,
+                value=saved_cookie  # 设置保存的cookie作为默认值
             )
             save_dir = gr.Textbox(
                 label="保存路径(可选)",
@@ -135,7 +157,20 @@ def create_ui() -> gr.Blocks:
                 info="留空则使用默认路径",
                 scale=1
             )
-            
+        
+        # 每次cookie变化时保存
+        def on_cookie_change(cookie):
+            if cookie:
+                save_cookie(cookie)
+            return cookie
+        
+        cookie.change(
+            fn=on_cookie_change,
+            inputs=[cookie],
+            outputs=[cookie],
+            api_name=False
+        )
+        
         download_btn = gr.Button(
             "开始下载",
             variant="primary",
@@ -179,7 +214,7 @@ def create_ui() -> gr.Blocks:
             """
             ### 使用说明
             1. 从花瓣网画板URL中获取画板ID
-            2. 从浏览器开发者工具中复制Cookie
+            2. 从浏览器开发者工具中复制Cookie（首次输入后会自动保存）
             3. 点击"开始下载"按钮
             4. 等待下载完成
             
