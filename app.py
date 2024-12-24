@@ -97,6 +97,16 @@ def create_ui() -> gr.Blocks:
             primary_hue="blue",
             secondary_hue="blue",
         ),
+        css="""
+        #gallery-container {
+            height: 600px !important;
+            overflow-y: auto !important;
+        }
+        .gallery-item {
+            height: 200px !important;
+            object-fit: contain !important;
+        }
+        """
     ) as ui:
         gr.Markdown(
             """
@@ -137,13 +147,13 @@ def create_ui() -> gr.Blocks:
                 gallery = gr.Gallery(
                     label="图片预览",
                     columns=4,
-                    rows=None,  # 自动调整行数
-                    height=600,
+                    height="auto",
                     preview=True,
                     show_label=True,
                     show_share_button=False,
                     show_download_button=True,
-                    elem_id="gallery"
+                    elem_id="gallery",
+                    container=True
                 )
             
             with gr.Column(scale=1):
