@@ -1,5 +1,5 @@
 import os
-import requests
+import httpx
 import time
 from pathlib import Path
 import random
@@ -9,41 +9,26 @@ class HuabanDownloader:
     def __init__(self):
         self.base_url = "https://huaban.com/v3"
         self.img_base_url = "https://gd-hbimg.huaban.com"
-        self.user_agents = [
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0"
-        ]
+        self.user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        self.client = httpx.Client(verify=False, timeout=30)
         
-    def _get_headers(self, cookie):
+    def _get_headers(self, cookie=None):
         """获取请求头"""
-        return {
+        headers = {
             "Accept": "application/json, text/plain, */*",
-            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-            "Cookie": cookie,
-            "User-Agent": random.choice(self.user_agents),
+            "User-Agent": self.user_agent,
             "Referer": "https://huaban.com/",
-            "Origin": "https://huaban.com",
-            "X-Requested-With": "XMLHttpRequest",
-            "Sec-Ch-Ua": '"Not_A Brand";v="8", "Chromium";v="120"',
-            "Sec-Ch-Ua-Mobile": "?0",
-            "Sec-Ch-Ua-Platform": '"Windows"',
-            "Sec-Fetch-Dest": "empty",
-            "Sec-Fetch-Mode": "cors",
-            "Sec-Fetch-Site": "same-origin"
+            "Origin": "https://huaban.com"
         }
+        if cookie:
+            headers["Cookie"] = cookie
+        return headers
         
     def get_board_info(self, board_id, cookie):
         """获取画板信息"""
         try:
-            headers = self._get_headers(cookie)
             url = f"{self.base_url}/boards/{board_id}?fields=board:BOARD_DETAIL"
-            
-            # 先发送一个 OPTIONS 请求
-            requests.options(url, headers=headers, timeout=10)
-            
-            # 然后发送 GET 请求
-            resp = requests.get(url, headers=headers, timeout=10)
+            resp = self.client.get(url, headers=self._get_headers(cookie))
             resp.raise_for_status()
             
             data = resp.json()
@@ -57,7 +42,6 @@ class HuabanDownloader:
     def get_board_pins(self, board_id, cookie):
         """获取画板中的所有图片列表"""
         try:
-            headers = self._get_headers(cookie)
             all_pins = []
             page_size = 100
             last_pin = None
@@ -67,11 +51,7 @@ class HuabanDownloader:
                 if last_pin:
                     url += f"&max={last_pin['pin_id']}"
                 
-                # 先发送 OPTIONS 请求
-                requests.options(url, headers=headers, timeout=10)
-                
-                # 然后发送 GET 请求
-                resp = requests.get(url, headers=headers, timeout=10)
+                resp = self.client.get(url, headers=self._get_headers(cookie))
                 resp.raise_for_status()
                 
                 data = resp.json()
@@ -79,17 +59,15 @@ class HuabanDownloader:
                     raise Exception(f"API返回错误: {json.dumps(data, ensure_ascii=False)}")
                     
                 pins = data["pins"]
-                
                 if not pins:
                     break
                     
                 all_pins.extend(pins)
-                
                 if len(pins) < page_size:
                     break
                     
                 last_pin = pins[-1]
-                time.sleep(random.uniform(0.5, 1.0))  # 随机延迟
+                time.sleep(0.5)  # 固定延迟
             
             return all_pins
             
@@ -117,18 +95,18 @@ class HuabanDownloader:
                 return save_path
                 
             # 下载文件
-            headers = {
-                "User-Agent": random.choice(self.user_agents),
-                "Referer": "https://huaban.com/"
-            }
-            resp = requests.get(img_url, headers=headers, stream=True, timeout=10)
-            resp.raise_for_status()
-            
-            with open(save_path, 'wb') as f:
-                for data in resp.iter_content(1024):
-                    f.write(data)
+            with self.client.stream("GET", img_url, headers=self._get_headers()) as resp:
+                resp.raise_for_status()
+                with open(save_path, 'wb') as f:
+                    for chunk in resp.iter_bytes(chunk_size=8192):
+                        f.write(chunk)
                     
             return save_path
             
         except Exception as e:
             raise Exception(f"下载图片失败 [{img_url}]: {str(e)}")
+            
+    def __del__(self):
+        """确保关闭客户端连接"""
+        if hasattr(self, 'client'):
+            self.client.close()
